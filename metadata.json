@@ -1,6 +1,0 @@
-{
-  "name": "Atarashi Meet",
-  "description": "An AI-powered meeting minutes taker that transcribes live microphone input or interactive simulated meetings, generating structured summaries, decisions, action items, and enabling Q&A with the meeting content.",
-  "requestFramePermissions": ["camera", "microphone"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
