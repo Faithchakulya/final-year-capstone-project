@@ -144,7 +144,7 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
   const [copied, setCopied] = useState<"link" | "transcript" | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const transcriptListRef = useRef<HTMLDivElement>(null);
 
   const sound = (type: SoundType) => {
     if (isSoundEnabled) playSound(type);
@@ -210,7 +210,8 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
   }, []);
 
   useEffect(() => {
-    if (panel === "transcript") transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const list = transcriptListRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
   }, [transcriptLines, panel]);
 
   const togglePanel = (next: Panel) => {
@@ -263,7 +264,7 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
       new Set([...attendees.current, ...(minutes?.peoplePresent ?? [])].map((n) => n.trim()).filter(Boolean))
     );
     return {
-      id: meetingId,
+      id: `${meetingId}-${Date.now().toString(36)}`,
       title: meetingTitle,
       date: new Date().toLocaleString([], { dateStyle: "medium", timeStyle: "short" }),
       createdAt: new Date().toISOString(),
@@ -437,7 +438,7 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
 
         <div className="flex-grow flex flex-col md:grid md:grid-cols-12 md:gap-4 md:min-h-0 md:overflow-hidden">
           <div className="flex flex-col flex-grow md:col-span-8 md:h-full md:min-h-0">
-            <div className="flex-grow flex flex-col items-center justify-center relative mb-4 md:mb-0 bg-[#11121b] border border-slate-900 rounded-2xl overflow-hidden min-h-[220px]">
+            <div className="flex-grow flex flex-col items-center justify-center relative mb-4 md:mb-0 bg-[#11121b] border border-slate-900 rounded-2xl overflow-hidden min-h-[280px] pt-6 pb-24">
               {isSelfSpeaking && isCameraOn && media.stream && media.hasVideo ? (
                 <div className="absolute inset-0 bg-black">
                   <LocalVideo stream={media.stream} />
@@ -445,7 +446,7 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
               ) : (
                 <div className="relative mb-6">
                   <div
-                    className={`w-32 h-32 rounded-full ${avatarColor(activeSpeaker)} flex items-center justify-center text-4xl font-bold text-white border-4 border-slate-900`}
+                    className={`w-24 h-24 sm:w-32 sm:h-32 rounded-full ${avatarColor(activeSpeaker)} flex items-center justify-center text-3xl sm:text-4xl font-bold text-white border-4 border-slate-900`}
                   >
                     {initials(activeSpeaker)}
                   </div>
@@ -591,7 +592,7 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
               )}
             </div>
           </div>
-          <div className="flex-grow overflow-y-auto p-5 flex flex-col gap-3.5">
+          <div ref={transcriptListRef} className="flex-grow min-h-0 overflow-y-auto p-5 flex flex-col gap-3.5">
             {filteredLines.length === 0 ? (
               <p className="text-xs text-slate-500 text-center my-auto">
                 {searchQuery ? "No matches." : "Nothing has been transcribed yet."}
@@ -612,14 +613,13 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
                 </div>
               ))
             )}
-            <div ref={transcriptEndRef} />
           </div>
         </Drawer>
       )}
 
       {panel === "chat" && (
         <Drawer title="Chat" subtitle={meetingTitle} icon={<MessageSquare className="w-4 h-4" />} onClose={() => setPanel(null)}>
-          <div className="flex-grow overflow-y-auto p-5 flex flex-col gap-3.5">
+          <div className="flex-grow min-h-0 overflow-y-auto p-5 flex flex-col gap-3.5">
             {chatMessages.length === 0 ? (
               <p className="text-xs text-slate-500 text-center my-auto">No messages yet.</p>
             ) : (
@@ -664,7 +664,7 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
 
       {panel === "people" && (
         <Drawer title="People" subtitle={`${participantCount} in call`} icon={<Users className="w-4 h-4" />} onClose={() => setPanel(null)}>
-          <div className="flex-grow overflow-y-auto p-5 space-y-3">
+          <div className="flex-grow min-h-0 overflow-y-auto p-5 space-y-3">
             {[
               { id: clientId, name: displayName, phone: userPhone, isMuted, isCameraOn, isHandRaised, isSelf: true },
               ...room.remoteParticipants.map((p) => ({ ...p, isSelf: false })),
@@ -751,7 +751,9 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
             <div className="flex gap-4 mb-5">
               <XCircle className="w-8 h-8 text-red-400 shrink-0" />
               <div className="space-y-1">
-                <h3 className="text-base font-bold text-white">Couldn't create a summary</h3>
+                <h3 className="text-base font-bold text-white">
+                  {transcriptLines.length === 0 ? "Nothing to save" : "Couldn't create a summary"}
+                </h3>
                 <p className="text-xs text-slate-400 leading-relaxed break-words">{saveError}</p>
               </div>
             </div>

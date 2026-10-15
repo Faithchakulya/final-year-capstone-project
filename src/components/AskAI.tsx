@@ -13,10 +13,12 @@ export default function AskAI({ transcript, placeholder = "Ask about this meetin
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Scroll only the message list; scrollIntoView would also scroll the page around it.
+    const list = listRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
   }, [messages, isSending]);
 
   const addMessage = (sender: AssistantMessage["sender"], text: string) =>
@@ -53,8 +55,8 @@ export default function AskAI({ transcript, placeholder = "Ask about this meetin
   };
 
   return (
-    <div className="flex flex-col flex-grow min-h-[300px]">
-      <div className="flex-grow overflow-y-auto px-4 py-4 flex flex-col gap-4">
+    <div className="flex flex-col flex-grow min-h-0">
+      <div ref={listRef} className="flex-grow min-h-0 overflow-y-auto px-4 py-4 flex flex-col gap-4">
         {messages.length === 0 && (
           <p className="text-xs text-slate-500 text-center my-auto">
             Ask a question and the answer will come from the transcript.
@@ -92,7 +94,6 @@ export default function AskAI({ transcript, placeholder = "Ask about this meetin
             Thinking...
           </div>
         )}
-        <div ref={endRef} />
       </div>
 
       <form onSubmit={handleSubmit} className="p-4 border-t border-slate-800 flex gap-2">

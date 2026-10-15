@@ -203,7 +203,7 @@ export default function MeetingDetail({ meeting, onBack, onToggleActionItem }: M
           )}
 
           {section === "chat" && (
-            <div className="flex flex-col flex-grow bg-[#101117] border border-slate-900 rounded-2xl overflow-hidden animate-fade-in">
+            <div className="flex flex-col h-[60vh] min-h-[320px] bg-[#101117] border border-slate-900 rounded-2xl overflow-hidden animate-fade-in">
               <AskAI transcript={transcriptText} placeholder={`Ask about "${meeting.title}"...`} />
             </div>
           )}
