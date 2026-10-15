@@ -6,15 +6,16 @@ import { extractMeetingId } from "../lib/meeting";
 interface HomeProps {
   meetings: Meeting[];
   hasApiKey: boolean;
+  initialJoinCode: string;
   onStartNew: () => void;
   onJoinCode: (code: string) => void;
   onViewMeeting: (meeting: Meeting) => void;
   onDeleteMeeting: (id: string) => void;
 }
 
-export default function Home({ meetings, hasApiKey, onStartNew, onJoinCode, onViewMeeting, onDeleteMeeting }: HomeProps) {
+export default function Home({ meetings, hasApiKey, initialJoinCode, onStartNew, onJoinCode, onViewMeeting, onDeleteMeeting }: HomeProps) {
   const [now, setNow] = useState(new Date());
-  const [joinCode, setJoinCode] = useState("");
+  const [joinCode, setJoinCode] = useState(initialJoinCode);
   const [isCheckingCode, setIsCheckingCode] = useState(false);
   const [joinError, setJoinError] = useState("");
 
@@ -23,9 +24,8 @@ export default function Home({ meetings, hasApiKey, onStartNew, onJoinCode, onVi
     return () => clearInterval(interval);
   }, []);
 
-  const handleJoinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const code = extractMeetingId(joinCode);
+  const checkAndJoin = async (input: string) => {
+    const code = extractMeetingId(input);
     if (!code) return;
 
     setIsCheckingCode(true);
@@ -36,13 +36,23 @@ export default function Home({ meetings, hasApiKey, onStartNew, onJoinCode, onVi
       if (data.exists) {
         onJoinCode(code);
       } else {
-        setJoinError("No meeting found with that code.");
+        setJoinError("No meeting found with that code. It may have ended.");
       }
     } catch {
       setJoinError("Couldn't check the code. Try again.");
     } finally {
       setIsCheckingCode(false);
     }
+  };
+
+  // Opened from an invite link.
+  useEffect(() => {
+    if (initialJoinCode) checkAndJoin(initialJoinCode);
+  }, []);
+
+  const handleJoinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    checkAndJoin(joinCode);
   };
 
   return (
@@ -101,7 +111,7 @@ export default function Home({ meetings, hasApiKey, onStartNew, onJoinCode, onVi
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
               {meetings.map((meeting) => (
                 <div
-                  key={`${meeting.id}-${meeting.createdAt}`}
+                  key={meeting.id}
                   onClick={() => onViewMeeting(meeting)}
                   className="flex items-center justify-between bg-[#141520] hover:bg-[#1a1b2a] border border-slate-900/40 rounded-2xl p-3.5 cursor-pointer transition group"
                 >

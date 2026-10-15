@@ -16,6 +16,8 @@ export default function App() {
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(true);
+  // Code from an invite link (?join=...), checked by Home before joining.
+  const [linkCode, setLinkCode] = useState(() => new URLSearchParams(window.location.search).get("join") ?? "");
 
   const [userName, setUserName] = useState(() => localStorage.getItem("user_name") || "");
   const [userPhone, setUserPhone] = useState(() => localStorage.getItem("user_phone") || "");
@@ -36,10 +38,10 @@ export default function App() {
       .then(setMeetings)
       .catch((err) => console.error("Failed to load meetings:", err));
 
-    const joinCode = new URLSearchParams(window.location.search).get("join");
-    if (joinCode) {
+    if (linkCode) {
+      // Home has picked the code up by now; don't re-check it on later visits.
       window.history.replaceState(null, "", window.location.pathname);
-      joinByCode(joinCode);
+      setLinkCode("");
     }
   }, []);
 
@@ -94,7 +96,7 @@ export default function App() {
     }
   };
 
-  function joinByCode(input: string) {
+  const joinByCode = (input: string) => {
     const code = extractMeetingId(input);
     if (!code) return;
     setActiveMeetingId(code);
@@ -105,7 +107,7 @@ export default function App() {
       setPendingJoinCode(code);
       setView("register");
     }
-  }
+  };
 
   const enterMeeting = () => {
     setShowJoinModal(false);
@@ -124,6 +126,7 @@ export default function App() {
           <Home
             meetings={meetings}
             hasApiKey={hasApiKey}
+            initialJoinCode={linkCode}
             onStartNew={handleStartNewMeeting}
             onJoinCode={joinByCode}
             onViewMeeting={(meeting) => {
