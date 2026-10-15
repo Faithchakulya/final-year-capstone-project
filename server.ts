@@ -2,10 +2,12 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import http from "http";
+import https from "https";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { WebSocketServer, WebSocket } from "ws";
 import type { Meeting, RoomParticipant } from "./src/types.js";
+import { getDevCertificate, lanAddresses } from "./devCert.js";
 
 dotenv.config();
 
@@ -390,8 +392,16 @@ function handleConnection(ws: WebSocket) {
 }
 
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
+  const isProduction = process.env.NODE_ENV === "production";
+  // `npm run dev:https` serves over HTTPS so other devices on the network can use their camera and microphone.
+  const useHttps = process.argv.includes("--https") || process.env.HTTPS === "true";
+  const server = useHttps ? https.createServer(getDevCertificate(), app) : http.createServer(app);
+
+  if (!isProduction) {
+    const vite = await createViteServer({
+      server: { middlewareMode: true, hmr: { server } },
+      appType: "spa",
+    });
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
@@ -399,21 +409,25 @@ async function startServer() {
     app.get("*", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
 
-  const httpServer = http.createServer(app);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
   wss.on("connection", handleConnection);
 
-  httpServer.on("upgrade", (request, socket, head) => {
-    const url = new URL(request.url || "", `http://${request.headers.host || "localhost"}`);
+  server.on("upgrade", (request, socket, head) => {
+    const url = new URL(request.url || "", "http://localhost");
     if (url.pathname === "/ws") {
       wss.handleUpgrade(request, socket, head, (ws) => wss.emit("connection", ws, request));
-    } else {
+    } else if (isProduction) {
       socket.destroy();
     }
+    // In development, Vite's hot-reload socket handles other upgrade requests.
   });
 
-  httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  server.listen(PORT, "0.0.0.0", () => {
+    const protocol = useHttps ? "https" : "http";
+    console.log(`Server running on ${protocol}://localhost:${PORT}`);
+    for (const address of lanAddresses()) {
+      console.log(`  On your network: ${protocol}://${address}:${PORT}`);
+    }
   });
 }
 

@@ -14,7 +14,15 @@ A browser-based meeting room that transcribes what people say and turns the tran
 
 ## Testing with two laptops
 
-Run the app on one laptop and open `http://<that laptop's IP>:3000` on the other, both on the same Wi-Fi. Allow Node.js through the firewall on the host, and see the camera/microphone note under Limitations.
+Browsers only allow the camera and microphone on `https` pages (or `localhost`), so use the HTTPS dev server:
+
+```bash
+npm run dev:https
+```
+
+It prints the network address, e.g. `https://192.168.1.20:3000`. Open that address on **both** laptops (on the same Wi-Fi), so invite links point at an address the other laptop can reach. The certificate is self-signed, so each browser shows a warning the first time: choose *Advanced → Proceed*. On the host laptop, allow Node.js through the firewall when asked.
+
+The certificate is generated into `.cert/` and covers `localhost` plus the machine's current network addresses. It is regenerated when those addresses change.
 
 ## Getting started
 
@@ -41,6 +49,7 @@ npm start
 
 ```
 server.ts                Express API, Groq calls, WebSocket rooms
+devCert.ts               Self-signed certificate for `npm run dev:https`
 src/
   App.tsx                View routing and top-level state
   types.ts               Shared types (also used by the server)
@@ -83,6 +92,6 @@ WebSocket messages go through `/ws` (`join-room`, `update-state`, `raise-hand`, 
 
 - Calls are a mesh (everyone connects to everyone), which suits small meetings of up to about five people.
 - Only a public STUN server is configured, with no TURN server. Calls work on the same network and on most home networks, but can fail across strict corporate or mobile networks.
-- Browsers only allow the camera and microphone on `https` or `localhost`. To test on another laptop over plain `http://<ip>:3000`, either serve the app over HTTPS or, in Chrome, add the address under `chrome://flags/#unsafely-treat-insecure-origin-as-secure`.
+- `npm run dev:https` is for local testing only. In production, put the app behind a proper HTTPS host or reverse proxy.
 - The Web Speech API works in Chrome and Edge. Other browsers can join a room but won't transcribe.
 - Meetings are stored in a JSON file, which suits a single server instance only.
