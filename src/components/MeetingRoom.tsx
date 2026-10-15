@@ -28,6 +28,7 @@ import { playSound, SoundType } from "../lib/sounds";
 import { useLocalMedia } from "../hooks/useLocalMedia";
 import { useRoomSocket } from "../hooks/useRoomSocket";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
+import { SignalMessage, usePeerConnections } from "../hooks/usePeerConnections";
 import AskAI from "./AskAI";
 import Drawer from "./Drawer";
 
@@ -53,13 +54,25 @@ interface MeetingRoomProps {
   onCancel: () => void;
 }
 
-function LocalVideo({ stream }: { stream: MediaStream }) {
+function VideoView({ stream, mirrored = false }: { stream: MediaStream; mirrored?: boolean }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     if (ref.current) ref.current.srcObject = stream;
   }, [stream]);
-  return <video ref={ref} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />;
+  // Always muted: sound is played by RemoteAudio so it keeps going when the video is hidden.
+  return <video ref={ref} autoPlay playsInline muted className={`w-full h-full object-cover ${mirrored ? "scale-x-[-1]" : ""}`} />;
 }
+
+function RemoteAudio({ stream }: { stream: MediaStream }) {
+  const ref = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.srcObject = stream;
+  }, [stream]);
+  return <audio ref={ref} autoPlay />;
+}
+
+const hasLiveVideo = (stream?: MediaStream) =>
+  Boolean(stream?.getVideoTracks().some((t) => t.readyState === "live" && !t.muted));
 
 interface TileProps {
   name: string;
@@ -70,16 +83,22 @@ interface TileProps {
   isSpeaking: boolean;
   reaction?: string;
   levels?: number[] | null;
+  video?: MediaStream | null;
 }
 
-function ParticipantTile({ name, label, isMuted, isCameraOn, isHandRaised, isSpeaking, reaction, levels }: TileProps) {
+function ParticipantTile({ name, label, isMuted, isCameraOn, isHandRaised, isSpeaking, reaction, levels, video }: TileProps) {
   return (
     <div
       className={`bg-[#11121b] border rounded-2xl p-3 flex flex-col items-center justify-center text-center relative overflow-hidden min-h-[90px] ${
         isSpeaking ? "border-emerald-500/60" : "border-slate-900"
       }`}
     >
-      <div className="relative mb-1">
+      {video && isCameraOn && (
+        <div className="absolute inset-0 bg-black">
+          <VideoView stream={video} />
+        </div>
+      )}
+      <div className={`relative mb-1 ${video && isCameraOn ? "invisible" : ""}`}>
         <div className={`w-11 h-11 rounded-full ${avatarColor(name)} flex items-center justify-center text-white text-sm font-bold`}>
           {initials(name)}
         </div>
@@ -87,7 +106,7 @@ function ParticipantTile({ name, label, isMuted, isCameraOn, isHandRaised, isSpe
           <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#11121b] rounded-full" title="Camera on" />
         )}
       </div>
-      <span className="text-[10px] font-semibold text-slate-300 bg-slate-950/70 px-1.5 py-0.5 rounded-md mt-auto truncate max-w-[90px]" title={label}>
+      <span className="relative text-[10px] font-semibold text-slate-300 bg-slate-950/70 px-1.5 py-0.5 rounded-md mt-auto truncate max-w-[90px]" title={label}>
         {label}
       </span>
       {isMuted && <MicOff className="w-3 h-3 text-red-400 absolute top-2 right-2 bg-slate-950/80 p-0.5 rounded-full" />}
@@ -179,10 +198,17 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
       onTranscriptLine: addTranscriptLine,
       onReaction: showReaction,
       onChatMessage: (message) => setChatMessages((prev) => [...prev, message]),
+      onSignal: (message) => handleSignalRef.current?.(message),
     }
   );
 
   const media = useLocalMedia(isMuted, isCameraOn);
+
+  const handleSignalRef = useRef<(message: SignalMessage) => void>(undefined);
+  const calls = usePeerConnections(clientId, room.remoteParticipants, media.stream, (to, data) =>
+    room.send({ type: "signal", to, data })
+  );
+  handleSignalRef.current = calls.handleSignal;
 
   const speech = useSpeechRecognition(!isMuted && !isSaving, {
     onInterim: (text) => {
@@ -330,6 +356,11 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
 
   const participantCount = room.remoteParticipants.length + 1;
   const isSelfSpeaking = activeSpeaker === displayName;
+  const remoteSpeaker = room.remoteParticipants.find((p) => p.name === activeSpeaker);
+  const remoteSpeakerStream = remoteSpeaker ? calls.remoteStreams[remoteSpeaker.id] : undefined;
+  const stageVideo = isSelfSpeaking
+    ? isCameraOn && media.hasVideo ? media.stream : null
+    : remoteSpeaker?.isCameraOn && hasLiveVideo(remoteSpeakerStream) ? remoteSpeakerStream! : null;
   const recognitionError = speech.error || media.error;
 
   const roundButton = (size: "sm" | "lg", active: boolean, danger: boolean) =>
@@ -439,9 +470,9 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
         <div className="flex-grow flex flex-col md:grid md:grid-cols-12 md:gap-4 md:min-h-0 md:overflow-hidden">
           <div className="flex flex-col flex-grow md:col-span-8 md:h-full md:min-h-0">
             <div className="flex-grow flex flex-col items-center justify-center relative mb-4 md:mb-0 bg-[#11121b] border border-slate-900 rounded-2xl overflow-hidden min-h-[280px] pt-6 pb-24">
-              {isSelfSpeaking && isCameraOn && media.stream && media.hasVideo ? (
+              {stageVideo ? (
                 <div className="absolute inset-0 bg-black">
-                  <LocalVideo stream={media.stream} />
+                  <VideoView stream={stageVideo} mirrored={isSelfSpeaking} />
                 </div>
               ) : (
                 <div className="relative mb-6">
@@ -519,9 +550,13 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
                   isHandRaised={p.isHandRaised}
                   isSpeaking={activeSpeaker === p.name}
                   reaction={tileReactions[p.name]}
+                  video={hasLiveVideo(calls.remoteStreams[p.id]) ? calls.remoteStreams[p.id] : null}
                 />
               ))}
             </div>
+            {Object.entries(calls.remoteStreams).map(([id, stream]) => (
+              <RemoteAudio key={id} stream={stream} />
+            ))}
 
             <div className="md:hidden flex flex-col gap-3 mt-2 shrink-0">
               <div className="flex items-center justify-around bg-[#13141f] border border-slate-900 rounded-2xl py-3 px-4">

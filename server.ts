@@ -365,6 +365,15 @@ function handleConnection(ws: WebSocket) {
         }, me.id);
         break;
       }
+      case "signal": {
+        // WebRTC offers, answers and ICE candidates, passed to one peer in the same room.
+        const target = activeRooms.get(roomId)?.get(clip(data.to, 64));
+        if (!target || target === me || !data.data || typeof data.data !== "object") return;
+        if (target.ws.readyState === WebSocket.OPEN) {
+          target.ws.send(JSON.stringify({ type: "signal", from: me.id, data: data.data }));
+        }
+        break;
+      }
     }
   };
 
@@ -391,7 +400,7 @@ async function startServer() {
   }
 
   const httpServer = http.createServer(app);
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
   wss.on("connection", handleConnection);
 
   httpServer.on("upgrade", (request, socket, head) => {
