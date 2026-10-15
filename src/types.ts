@@ -1,8 +1,8 @@
 export interface TranscriptLine {
+  id: string;
   speaker: string;
   text: string;
-  timestamp: string; // e.g. "10:32 AM" or "+0:15"
-  id: string;
+  timestamp: string;
 }
 
 export interface ActionItem {
@@ -15,21 +15,39 @@ export interface Meeting {
   id: string;
   title: string;
   date: string;
-  createdAt: string; // ISO String
+  createdAt: string;
   participantsCount: number;
-  duration: string; // e.g., "32m"
+  duration: string;
   transcript: TranscriptLine[];
   summary: string;
   topicsCovered: string[];
   actionItems: ActionItem[];
   decisions: string[];
-  // Extended fields for full AI-generated minutes
   peoplePresent?: string[];
   discussion?: string;
 }
 
-export interface ChatMessage {
+/** A message in the "Ask AI" conversation about a meeting. */
+export interface AssistantMessage {
   sender: "user" | "ai";
   text: string;
   timestamp: string;
+}
+
+/** A message in the in-call chat. */
+export interface RoomChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  timestamp: string;
+}
+
+export interface RoomParticipant {
+  id: string;
+  name: string;
+  phone: string;
+  isMuted: boolean;
+  isCameraOn: boolean;
+  isHandRaised: boolean;
 }
