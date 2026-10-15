@@ -1,0 +1,242 @@
+[
+  {
+    "id": "fto-fjrz-kay",
+    "title": "Meeting 6",
+    "date": "Today, 08:47 PM",
+    "createdAt": "2026-07-22T18:47:30.887Z",
+    "participantsCount": 1,
+    "duration": "03:03",
+    "transcript": [],
+    "summary": "The meeting covered the replication of the minutes taker web app, configuration of server-side Gemini endpoints, and the finalization of visual high-fidelity components. These topics were discussed to advance the project. The details of the discussions were shared among the participants.",
+    "topicsCovered": [
+      "replicating the minutes taker web app",
+      "configuring server-side Gemini endpoints",
+      "finalizing visual high-fidelity components"
+    ],
+    "actionItems": [
+      {
+        "assignee": "unknown",
+        "task": "replicate the minutes taker web app"
+      },
+      {
+        "assignee": "unknown",
+        "task": "configure server-side Gemini endpoints"
+      },
+      {
+        "assignee": "unknown",
+        "task": "finalize visual high-fidelity components"
+      }
+    ],
+    "decisions": [
+      "no explicit decisions mentioned"
+    ],
+    "peoplePresent": [
+      "Mike"
+    ],
+    "discussion": "Mike mentioned that the meeting discussed replicating the beautiful minutes taker web app, configuring server-side Gemini endpoints, and finalizing visual high-fidelity components. There is no further discussion detail provided in the transcript."
+  },
+  {
+    "id": "wcr-brli-okb",
+    "title": "Meeting 5",
+    "date": "Today, 08:38 PM",
+    "createdAt": "2026-07-22T18:38:38.439Z",
+    "participantsCount": 1,
+    "duration": "00:35",
+    "transcript": [
+      {
+        "id": "1784745467985",
+        "speaker": "You (Mike)",
+        "text": "now imagine checking all those changes manually",
+        "timestamp": "08:37 PM"
+      },
+      {
+        "id": "1784745474609",
+        "speaker": "You (Mike)",
+        "text": "at the application build correctly did the tests pass did deployment break something doing this by hand becomes",
+        "timestamp": "08:37 PM"
+      },
+      {
+        "id": "1784745486527",
+        "speaker": "You (Mike)",
+        "text": "slow testing and",
+        "timestamp": "08:38 PM"
+      },
+      {
+        "id": "1784745499415",
+        "speaker": "You (Mike)",
+        "text": "to One developer updates the payment page another changes",
+        "timestamp": "08:38 PM"
+      },
+      {
+        "id": "1784745502959",
+        "speaker": "You (Mike)",
+        "text": "someone else improves products",
+        "timestamp": "08:38 PM"
+      },
+      {
+        "id": "1784745505989",
+        "speaker": "You (Mike)",
+        "text": "from all these developers push code changes",
+        "timestamp": "08:38 PM"
+      }
+    ],
+    "summary": "The meeting discussion centered around the challenges of manually checking changes in an application build, the impact of multiple developers pushing code changes, and the need for efficient testing and deployment processes. The conversation highlighted the complexity of managing updates from various developers. The meeting aimed to address the inefficiencies in the current manual process.",
+    "topicsCovered": [
+      "Manual Testing",
+      "Application Build",
+      "Code Deployment",
+      "Collaborative Development"
+    ],
+    "actionItems": [],
+    "decisions": [],
+    "peoplePresent": [
+      "Mike"
+    ],
+    "discussion": "Mike led the discussion, imagining a scenario where one must manually check all changes in an application build, ensuring tests pass and deployment does not break anything. He noted that with multiple developers updating different parts of the application, such as the payment page and product improvements, manually checking these changes becomes slow and inefficient. Mike highlighted the issue of various developers pushing code changes and the need for a more streamlined process."
+  },
+  {
+    "id": "glz-izqa-ukn",
+    "title": "Meeting 4",
+    "date": "Today, 17:05",
+    "createdAt": "2026-07-11T15:05:24.245Z",
+    "participantsCount": 1,
+    "duration": "00:44",
+    "transcript": [],
+    "summary": "The meeting discussed replicating a web app, configuring server-side endpoints, and finalizing visual components. The discussion centered around these key topics. Meeting participants shared their thoughts and ideas on how to move forward with the project.",
+    "topicsCovered": [
+      "replicating the beautiful minutes taker web app",
+      "configuring server-side Gemini endpoints",
+      "finalizing visual high-fidelity components"
+    ],
+    "actionItems": [
+      {
+        "assignee": "Godwin Banda",
+        "task": "Replicate the beautiful minutes taker web app, configure server-side Gemini endpoints, and finalize visual high-fidelity components"
+      }
+    ],
+    "decisions": [],
+    "peoplePresent": [
+      "Godwin Banda"
+    ],
+    "discussion": "Godwin Banda led the discussion, covering the replication of the minutes taker web app, configuration of server-side Gemini endpoints, and finalization of visual high-fidelity components. Although there were no other participants mentioned, Godwin Banda's contributions provided a comprehensive overview of the project's current status and future plans. The meeting laid the groundwork for moving forward with the discussed topics."
+  },
+  {
+    "id": "jzo-whty-iab",
+    "title": "Meeting 3",
+    "date": "Today, 04:53 PM",
+    "createdAt": "2026-07-11T14:53:26.078Z",
+    "participantsCount": 2,
+    "duration": "01:15",
+    "transcript": [
+      {
+        "id": "1783781581610",
+        "speaker": "You (Mike)",
+        "text": "hello",
+        "timestamp": "04:53 PM"
+      },
+      {
+        "id": "1783781588809",
+        "speaker": "You (Mike)",
+        "text": "it looks like the websocket is working now this is perfectly done",
+        "timestamp": "04:53 PM"
+      },
+      {
+        "id": "1783781595964",
+        "speaker": "You (Mike)",
+        "text": "I love the UI of the app and it's all making sense now",
+        "timestamp": "04:53 PM"
+      },
+      {
+        "id": "1783781599641",
+        "speaker": "You (Mike)",
+        "text": "okay okay",
+        "timestamp": "04:53 PM"
+      }
+    ],
+    "summary": "The meeting covered the successful implementation of the websocket and the appreciation of the app's UI. The participant expressed satisfaction with the current state of the project. No major issues were discussed during the meeting.",
+    "topicsCovered": [
+      "websocket implementation",
+      "app UI"
+    ],
+    "actionItems": [],
+    "decisions": [],
+    "peoplePresent": [
+      "Mike"
+    ],
+    "discussion": "Mike started the meeting by confirming that the websocket is working as expected and praised the UI of the app, indicating that everything is making sense now. He seemed pleased with the progress of the project, as there were no negative comments or issues raised during the meeting. The conversation was brief and mainly involved Mike expressing his satisfaction with the current state of the project."
+  },
+  {
+    "id": "cob-lspv-vyw",
+    "title": "Meeting 2",
+    "date": "Today, 04:50 PM",
+    "createdAt": "2026-07-11T14:50:44.141Z",
+    "participantsCount": 2,
+    "duration": "02:59",
+    "transcript": [],
+    "summary": "The meeting covered the replication of the minutes taker web app, configuration of server-side Gemini endpoints, and finalization of visual high-fidelity components. Discussions were held to explore these topics in detail. Key aspects of each topic were touched upon during the conversation.",
+    "topicsCovered": [
+      "replicating minutes taker web app",
+      "configuring server-side Gemini endpoints",
+      "finalizing visual high-fidelity components"
+    ],
+    "actionItems": [
+      {
+        "assignee": "Mike",
+        "task": "Replicate the minutes taker web app"
+      },
+      {
+        "assignee": "Unknown",
+        "task": "Configure server-side Gemini endpoints"
+      },
+      {
+        "assignee": "Unknown",
+        "task": "Finalize visual high-fidelity components"
+      }
+    ],
+    "decisions": [
+      "Replicate the minutes taker web app"
+    ],
+    "peoplePresent": [
+      "Mike"
+    ],
+    "discussion": "Mike led the discussion, mentioning that the meeting covered the replication of the minutes taker web app, configuration of server-side Gemini endpoints, and finalization of visual high-fidelity components. Mike's input was crucial in shaping the conversation, but specific contributions from other participants were not mentioned due to the limited transcript."
+  },
+  {
+    "id": "ikq-thmj-yxs",
+    "title": "Meeting 2",
+    "date": "Today, 16:40",
+    "createdAt": "2026-07-11T14:40:58.645Z",
+    "participantsCount": 1,
+    "duration": "00:01",
+    "transcript": [],
+    "summary": "The meeting discussed replicating a web app, configuring server-side Gemini endpoints, and finalizing visual high-fidelity components. These discussions aimed at improving the existing system. The participants shared their insights and contributions on the topics.",
+    "topicsCovered": [
+      "Replicating a web app",
+      "Configuring server-side Gemini endpoints",
+      "Finalizing visual high-fidelity components"
+    ],
+    "actionItems": [
+      {
+        "assignee": "Godwin Banda",
+        "task": "Replicate the beautiful minutes taker web app"
+      },
+      {
+        "assignee": "Godwin Banda",
+        "task": "Configure server-side Gemini endpoints"
+      },
+      {
+        "assignee": "Godwin Banda",
+        "task": "Finalize visual high-fidelity components"
+      }
+    ],
+    "decisions": [
+      "To replicate the web app",
+      "To configure server-side Gemini endpoints",
+      "To finalize visual high-fidelity components"
+    ],
+    "peoplePresent": [
+      "Godwin Banda"
+    ],
+    "discussion": "The meeting was led by Godwin Banda, who discussed various key points including replicating a beautiful minutes taker web app, configuring server-side Gemini endpoints, and finalizing visual high-fidelity components. The discussion mainly focused on these areas, with Godwin Banda sharing insights and tasks related to these topics. However, the transcript does not provide detailed contributions from other participants, as only Godwin Banda's comments are recorded."
+  }
+]
