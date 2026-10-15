@@ -5,7 +5,7 @@ import http from "http";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { WebSocketServer, WebSocket } from "ws";
-import type { Meeting } from "./src/types.js";
+import type { Meeting, RoomParticipant } from "./src/types.js";
 
 dotenv.config();
 
@@ -17,17 +17,9 @@ const GROQ_URL = "https://api.groq.com/openai/v1";
 const CHAT_MODEL = "llama-3.3-70b-versatile";
 const AI_NOT_CONFIGURED = "AI is not configured (set GROQ_API_KEY).";
 
-interface RoomParticipant {
-  id: string;
-  name: string;
-  phone: string;
-  isMuted: boolean;
-  isCameraOn: boolean;
-  isHandRaised: boolean;
-  ws: WebSocket;
-}
+type Connection = RoomParticipant & { ws: WebSocket };
 
-const activeRooms = new Map<string, Map<string, RoomParticipant>>();
+const activeRooms = new Map<string, Map<string, Connection>>();
 
 function readMeetings(): Meeting[] {
   try {
@@ -54,8 +46,8 @@ if (!GROQ_API_KEY) {
   console.warn(`${AI_NOT_CONFIGURED} AI routes will return 503.`);
 }
 
-// Base64 audio uploads can be large.
-app.use(express.json({ limit: "50mb" }));
+// Saved meetings include the full transcript.
+app.use(express.json({ limit: "5mb" }));
 
 async function groqChat(
   messages: { role: "system" | "user"; content: string }[],
@@ -79,25 +71,6 @@ async function groqChat(
   }
   const result = (await response.json()) as { choices: { message: { content: string } }[] };
   return result.choices[0]?.message.content ?? "";
-}
-
-async function transcribe(audioData: string, mimeType: string): Promise<string> {
-  const blob = new Blob([Buffer.from(audioData, "base64")], { type: mimeType || "audio/webm" });
-  const formData = new FormData();
-  formData.append("file", blob, "audio.webm");
-  formData.append("model", "whisper-large-v3-turbo");
-
-  const response = await fetch(`${GROQ_URL}/audio/transcriptions`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
-    body: formData,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Groq transcription failed: ${response.status} ${await response.text()}`);
-  }
-  const result = (await response.json()) as { text: string };
-  return result.text;
 }
 
 async function summarize(transcript: string, title: string) {
@@ -196,21 +169,6 @@ app.get("/api/meetings/exists/:id", (req, res) => {
   const { id } = req.params;
   const exists = activeRooms.has(id) || readMeetings().some((m) => m.id === id);
   res.json({ exists });
-});
-
-app.post("/api/ai/transcribe", async (req, res) => {
-  const { audioData, mimeType } = req.body;
-  if (!audioData) {
-    return res.status(400).json({ error: "Missing audioData" });
-  }
-  if (!requireAi(res)) return;
-
-  try {
-    res.json({ transcript: await transcribe(audioData, mimeType) });
-  } catch (error: any) {
-    console.error("Transcription failed:", error);
-    res.status(500).json({ error: error.message || "Transcription failed" });
-  }
 });
 
 app.post("/api/ai/summarize", async (req, res) => {
