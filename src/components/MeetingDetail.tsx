@@ -364,7 +364,7 @@ export default function MeetingDetail({
         .map((line) => `${line.speaker}: ${line.text}`)
         .join("\n");
 
-      const response = await fetch("/api/gemini/chat", {
+      const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

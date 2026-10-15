@@ -66,7 +66,7 @@ export default function AIAssistant({
     setChatMessages(newMessages);
 
     try {
-      const response = await fetch("/api/gemini/chat", {
+      const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
