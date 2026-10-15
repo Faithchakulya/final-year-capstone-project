@@ -12,17 +12,26 @@ A browser-based meeting room that transcribes what people say and turns the tran
 - **Ask AI** – ask questions about a meeting, answered from its transcript.
 - **History** – past meetings are stored in `meetings.json`, with tickable action items and Word (`.doc`) export.
 
-## Testing with two laptops
+## Testing on other laptops and phones
 
-Browsers only allow the camera and microphone on `https` pages (or `localhost`), so use the HTTPS dev server:
+Browsers only allow the camera and microphone on `https` pages (or `localhost`), so devices on your network need HTTPS. Build once, then run the production server over HTTPS:
 
 ```bash
-npm run dev:https
+npm run build
+npm run start:https
 ```
 
-It prints the network address, e.g. `https://192.168.1.20:3000`. Open that address on **both** laptops (on the same Wi-Fi), so invite links point at an address the other laptop can reach. The certificate is self-signed, so each browser shows a warning the first time: choose *Advanced → Proceed*. On the host laptop, allow Node.js through the firewall when asked.
+It prints the network address, e.g. `https://192.168.1.20:3000`. Use the production server for devices rather than `npm run dev:https`: the dev server's hot reload refreshes every page whenever its connection drops, which happens often on phones.
 
-The certificate is generated into `.cert/` and covers `localhost` plus the machine's current network addresses. It is regenerated when those addresses change.
+The certificate is signed by a small certificate authority created for this machine in `.cert/`. Install it once on each device so the browser trusts the server (iPhones need this, or calls won't connect):
+
+- **iPhone/iPad**: in Safari open `http://<address>:3000/ca.crt` and allow the download. Then Settings → General → VPN & Device Management → install the profile, and Settings → General → About → Certificate Trust Settings → turn on full trust for "Atarashi Meet local CA".
+- **Android**: open `http://<address>:3000/ca.crt`, then Settings → Security → Encryption & credentials → Install a certificate → CA certificate, and pick the downloaded file.
+- **Laptops**: open the HTTPS address and choose *Advanced → Proceed*, or install `ca.crt` as a trusted root.
+
+On the host machine, allow Node.js through the firewall when asked. Remove the CA from devices when you're done testing.
+
+Live captions start **off** on phones. Phone browsers give the microphone to speech recognition while it runs, so the call goes silent; turn captions on with the CC button only when needed.
 
 ## Getting started
 
@@ -49,7 +58,7 @@ npm start
 
 ```
 server.ts                Express API, Groq calls, WebSocket rooms
-devCert.ts               Self-signed certificate for `npm run dev:https`
+devCert.ts               Local CA and HTTPS certificate for testing on other devices
 src/
   App.tsx                View routing and top-level state
   types.ts               Shared types (also used by the server)

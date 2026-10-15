@@ -16,6 +16,7 @@ export function useSpeechRecognition(active: boolean, handlers: Handlers) {
 
   useEffect(() => {
     if (!active) return;
+    setError(null);
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -28,6 +29,18 @@ export function useSpeechRecognition(active: boolean, handlers: Handlers) {
     rec.interimResults = true;
     rec.lang = "en-US";
     let stopped = false;
+    let startedAt = 0;
+    let quickEnds = 0;
+    let restartTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const start = () => {
+      startedAt = Date.now();
+      try {
+        rec.start();
+      } catch {
+        // Already started.
+      }
+    };
 
     rec.onresult = (e: any) => {
       let interim = "";
@@ -48,23 +61,25 @@ export function useSpeechRecognition(active: boolean, handlers: Handlers) {
       }
     };
 
+    // Phones end recognition after every phrase (often with a beep), so back off
+    // instead of restarting instantly, and give up if it keeps ending at once.
     rec.onend = () => {
       if (stopped) return;
-      try {
-        rec.start();
-      } catch {
-        // Already started.
+      const ranFor = Date.now() - startedAt;
+      quickEnds = ranFor < 2000 ? quickEnds + 1 : 0;
+      if (quickEnds >= 5) {
+        stopped = true;
+        setError("Captions keep stopping on this device, so they were turned off.");
+        return;
       }
+      restartTimer = setTimeout(start, quickEnds > 0 ? 1500 : 250);
     };
 
-    try {
-      rec.start();
-    } catch (err) {
-      console.warn("Could not start speech recognition:", err);
-    }
+    start();
 
     return () => {
       stopped = true;
+      clearTimeout(restartTimer);
       rec.onend = null;
       rec.stop();
     };

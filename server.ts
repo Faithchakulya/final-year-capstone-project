@@ -8,7 +8,7 @@ import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { WebSocketServer, WebSocket } from "ws";
 import type { Meeting, RoomParticipant } from "./src/types.js";
-import { getDevCertificate, lanAddresses } from "./devCert.js";
+import { caCertificateDer, getDevCertificate, lanAddresses } from "./devCert.js";
 
 dotenv.config();
 
@@ -270,7 +270,15 @@ function broadcastParticipants(roomId: string) {
 
 const clip = (value: unknown, max: number) => (isString(value) ? value.trim().slice(0, max) : "");
 
-function handleConnection(ws: WebSocket) {
+function describeDevice(userAgent = ""): string {
+  if (/iPhone|iPad/.test(userAgent)) return "iPhone/iPad";
+  if (/Android/.test(userAgent)) return "Android";
+  if (/Windows/.test(userAgent)) return "Windows";
+  if (/Macintosh/.test(userAgent)) return "Mac";
+  return "other device";
+}
+
+function handleConnection(ws: WebSocket, device: string) {
   let roomId: string | null = null;
   let participantId: string | null = null;
 
@@ -279,6 +287,7 @@ function handleConnection(ws: WebSocket) {
     const room = activeRooms.get(roomId);
     // Only remove the entry if it still belongs to this socket.
     if (room && room.get(participantId)?.ws === ws) {
+      console.log(`[${roomId}] ${room.get(participantId)!.name} left (${room.size - 1} in room)`);
       room.delete(participantId);
       if (room.size === 0) {
         activeRooms.delete(roomId);
@@ -319,6 +328,7 @@ function handleConnection(ws: WebSocket) {
         ws,
       });
       broadcastParticipants(roomId);
+      console.log(`[${roomId}] ${clip(participant.name, 40) || "Guest"} joined from ${device} (${activeRooms.get(roomId)!.size} in room)`);
       return;
     }
 
@@ -393,10 +403,20 @@ function handleConnection(ws: WebSocket) {
 }
 
 async function startServer() {
-  const isProduction = process.env.NODE_ENV === "production";
+  const isProduction = process.env.NODE_ENV === "production" || process.argv.includes("--production");
   // `npm run dev:https` serves over HTTPS so other devices on the network can use their camera and microphone.
   const useHttps = process.argv.includes("--https") || process.env.HTTPS === "true";
   const server = useHttps ? https.createServer(getDevCertificate(), app) : http.createServer(app);
+
+  // Devices install this certificate authority once so they trust the HTTPS server (see README).
+  const sendCaCertificate = (_req: http.IncomingMessage, res: http.ServerResponse) => {
+    res.writeHead(200, {
+      "Content-Type": "application/x-x509-ca-cert",
+      "Content-Disposition": 'attachment; filename="atarashi-meet-ca.crt"',
+    });
+    res.end(caCertificateDer());
+  };
+  if (useHttps) app.get("/ca.crt", sendCaCertificate);
 
   if (!isProduction) {
     const vite = await createViteServer({
@@ -411,12 +431,11 @@ async function startServer() {
   }
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
-  wss.on("connection", handleConnection);
 
   server.on("upgrade", (request, socket, head) => {
     const url = new URL(request.url || "", "http://localhost");
     if (url.pathname === "/ws") {
-      wss.handleUpgrade(request, socket, head, (ws) => wss.emit("connection", ws, request));
+      wss.handleUpgrade(request, socket, head, (ws) => handleConnection(ws, describeDevice(request.headers["user-agent"])));
     } else if (isProduction) {
       socket.destroy();
     }
@@ -438,6 +457,8 @@ async function startServer() {
       })
     : server;
   const redirectServer = http.createServer((req, res) => {
+    // The CA certificate is also offered over plain http, before the device trusts it.
+    if (req.url === "/ca.crt") return sendCaCertificate(req, res);
     res.writeHead(301, { Location: `https://${req.headers.host ?? `localhost:${PORT}`}${req.url ?? "/"}` });
     res.end();
   });

@@ -1,34 +1,46 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const BAR_COUNT = 7;
+const VIDEO_CONSTRAINTS: MediaTrackConstraints = { width: 640, height: 480, facingMode: "user" };
 
 /**
  * Opens the camera and microphone and exposes the stream plus live mic levels.
- * Falls back to audio only if the camera is unavailable.
+ *
+ * Turning the camera off stops the video track (releasing the camera), and
+ * turning it on requests a new one. Only pausing the track leaves a frozen or
+ * black picture on some phones when it is resumed.
  */
 export function useLocalMedia(isMuted: boolean, isCameraOn: boolean) {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [audioLevels, setAudioLevels] = useState<number[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const cameraWanted = useRef(isCameraOn);
+  cameraWanted.current = isCameraOn;
+
+  const publish = (next: MediaStream) => {
+    streamRef.current = next;
+    setStream(next);
+  };
 
   useEffect(() => {
     let active = true;
-    let mediaStream: MediaStream | null = null;
     let audioCtx: AudioContext | null = null;
     let frame = 0;
 
     async function open() {
+      let mediaStream: MediaStream;
       try {
         mediaStream = await navigator.mediaDevices.getUserMedia({
           audio: true,
-          video: { width: 640, height: 480, facingMode: "user" },
+          video: cameraWanted.current ? VIDEO_CONSTRAINTS : false,
         });
       } catch {
         try {
           mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         } catch (err) {
           console.warn("Microphone access failed:", err);
-          setError("Microphone access was denied, so nothing will be transcribed.");
+          setError("Microphone access was denied, so others can't hear you and nothing will be transcribed.");
           return;
         }
       }
@@ -37,14 +49,14 @@ export function useLocalMedia(isMuted: boolean, isCameraOn: boolean) {
         mediaStream.getTracks().forEach((t) => t.stop());
         return;
       }
-      setStream(mediaStream);
+      publish(mediaStream);
 
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContextClass) return;
       audioCtx = new AudioContextClass() as AudioContext;
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 32;
-      audioCtx.createMediaStreamSource(mediaStream).connect(analyser);
+      audioCtx.createMediaStreamSource(new MediaStream(mediaStream.getAudioTracks())).connect(analyser);
       const data = new Uint8Array(analyser.frequencyBinCount);
 
       const tick = () => {
@@ -67,7 +79,8 @@ export function useLocalMedia(isMuted: boolean, isCameraOn: boolean) {
       active = false;
       cancelAnimationFrame(frame);
       audioCtx?.close().catch(() => {});
-      mediaStream?.getTracks().forEach((t) => t.stop());
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
     };
   }, []);
 
@@ -75,10 +88,40 @@ export function useLocalMedia(isMuted: boolean, isCameraOn: boolean) {
     stream?.getAudioTracks().forEach((t) => (t.enabled = !isMuted));
   }, [stream, isMuted]);
 
+  // Start or stop the camera when it is toggled.
   useEffect(() => {
-    stream?.getVideoTracks().forEach((t) => (t.enabled = isCameraOn));
-  }, [stream, isCameraOn]);
+    const current = streamRef.current;
+    if (!current) return;
+    const audio = current.getAudioTracks();
+    const video = current.getVideoTracks().filter((t) => t.readyState === "live");
 
-  const hasVideo = Boolean(stream?.getVideoTracks().length);
+    if (!isCameraOn && video.length > 0) {
+      video.forEach((t) => t.stop());
+      publish(new MediaStream(audio));
+      return;
+    }
+
+    if (isCameraOn && video.length === 0) {
+      let cancelled = false;
+      navigator.mediaDevices
+        .getUserMedia({ video: VIDEO_CONSTRAINTS })
+        .then((camera) => {
+          if (cancelled || !cameraWanted.current) {
+            camera.getTracks().forEach((t) => t.stop());
+            return;
+          }
+          publish(new MediaStream([...audio, ...camera.getVideoTracks()]));
+        })
+        .catch((err) => {
+          console.warn("Camera access failed:", err);
+          setError("Couldn't start the camera.");
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [isCameraOn, stream]);
+
+  const hasVideo = Boolean(stream?.getVideoTracks().some((t) => t.readyState === "live"));
   return { stream, hasVideo, audioLevels, error };
 }

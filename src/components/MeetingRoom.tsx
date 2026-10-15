@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Captions,
+  CaptionsOff,
   Check,
   Copy,
   Eye,
@@ -33,6 +35,12 @@ import AskAI from "./AskAI";
 import Drawer from "./Drawer";
 
 const EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
+
+// Phone browsers hand the microphone to speech recognition while it runs, so the
+// call goes silent; live captions start off there and can be turned on.
+const IS_PHONE =
+  /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+  (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
 
 type Panel = "ai" | "transcript" | "chat" | "people" | null;
 
@@ -148,6 +156,7 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
   const [isSubtitleVisible, setIsSubtitleVisible] = useState(true);
+  const [captionsOn, setCaptionsOn] = useState(!IS_PHONE);
   const [duration, setDuration] = useState(0);
   const [activeSpeaker, setActiveSpeaker] = useState(displayName);
   const [subtitle, setSubtitle] = useState("");
@@ -210,7 +219,7 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
   );
   handleSignalRef.current = calls.handleSignal;
 
-  const speech = useSpeechRecognition(!isMuted && !isSaving, {
+  const speech = useSpeechRecognition(captionsOn && !isMuted && !isSaving, {
     onInterim: (text) => {
       setActiveSpeaker(displayName);
       setSubtitle(text);
@@ -401,6 +410,16 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
           </div>
         )}
       </div>
+      <button
+        onClick={() => {
+          sound("click");
+          setCaptionsOn(!captionsOn);
+        }}
+        className={roundButton(size, captionsOn, false)}
+        title={captionsOn ? "Turn off live captions" : "Turn on live captions"}
+      >
+        {captionsOn ? <Captions className="w-5 h-5" /> : <CaptionsOff className="w-5 h-5" />}
+      </button>
       <button onClick={toggleHand} className={roundButton(size, isHandRaised, false)} title={isHandRaised ? "Lower hand" : "Raise hand"}>
         <Hand className="w-5 h-5" style={{ fill: isHandRaised ? "currentColor" : "none" }} />
       </button>
@@ -511,7 +530,15 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
                       <p className="text-xs text-white leading-relaxed pr-6">{subtitle}</p>
                     </>
                   ) : (
-                    <p className="text-xs text-slate-400">{isMuted ? "You are muted." : "Captions will appear when someone speaks."}</p>
+                    <p className="text-xs text-slate-400">
+                      {isMuted
+                        ? "You are muted."
+                        : !captionsOn
+                          ? IS_PHONE
+                            ? "Your live captions are off. Turning them on can stop others hearing you on a phone."
+                            : "Your live captions are off."
+                          : "Captions will appear when someone speaks."}
+                    </p>
                   )}
                 </div>
               ) : (
@@ -571,7 +598,7 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
               <div className="flex items-center justify-around bg-[#13141f] border border-slate-900 rounded-2xl py-3 px-4">
                 {panelButtons}
               </div>
-              <div className="flex items-center justify-center gap-4 py-2">{renderCallControls("sm")}</div>
+              <div className="flex items-center justify-center gap-2.5 py-2">{renderCallControls("sm")}</div>
             </div>
           </div>
         </div>
