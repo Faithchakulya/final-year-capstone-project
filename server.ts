@@ -22,16 +22,47 @@ type Connection = RoomParticipant & { ws: WebSocket };
 const activeRooms = new Map<string, Map<string, Connection>>();
 
 function readMeetings(): Meeting[] {
-  try {
-    if (!fs.existsSync(MEETINGS_FILE)) {
-      fs.writeFileSync(MEETINGS_FILE, "[]");
-      return [];
-    }
-    return JSON.parse(fs.readFileSync(MEETINGS_FILE, "utf-8"));
-  } catch (error) {
-    console.error("Error reading meetings.json:", error);
+  if (!fs.existsSync(MEETINGS_FILE)) {
+    fs.writeFileSync(MEETINGS_FILE, "[]");
     return [];
   }
+  try {
+    const data = JSON.parse(fs.readFileSync(MEETINGS_FILE, "utf-8"));
+    if (Array.isArray(data)) return data;
+    throw new Error("meetings.json does not contain an array");
+  } catch (error) {
+    // Keep the unreadable file instead of overwriting it on the next save.
+    const backup = MEETINGS_FILE.replace(/\.json$/, `.corrupt-${Date.now()}.json`);
+    fs.renameSync(MEETINGS_FILE, backup);
+    fs.writeFileSync(MEETINGS_FILE, "[]");
+    console.error(`Could not read meetings.json, moved it to ${path.basename(backup)}:`, error);
+    return [];
+  }
+}
+
+const isString = (value: unknown): value is string => typeof value === "string";
+const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every(isString);
+
+function isMeeting(value: any): value is Meeting {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    isString(value.id) &&
+    value.id.length > 0 &&
+    isString(value.title) &&
+    value.title.trim().length > 0 &&
+    isString(value.date) &&
+    isString(value.createdAt) &&
+    typeof value.participantsCount === "number" &&
+    isString(value.duration) &&
+    isString(value.summary) &&
+    isStringArray(value.topicsCovered) &&
+    isStringArray(value.decisions) &&
+    Array.isArray(value.transcript) &&
+    value.transcript.every((l: any) => l && isString(l.speaker) && isString(l.text)) &&
+    Array.isArray(value.actionItems) &&
+    value.actionItems.every((a: any) => a && isString(a.task) && isString(a.assignee))
+  );
 }
 
 function writeMeetings(meetings: Meeting[]) {
@@ -136,11 +167,11 @@ app.get("/api/meetings", (_req, res) => {
 });
 
 app.post("/api/meetings", (req, res) => {
-  const meeting = req.body as Meeting;
-  if (!meeting.title) {
-    return res.status(400).json({ error: "Meeting title is required" });
+  const meeting = req.body;
+  if (!isMeeting(meeting)) {
+    return res.status(400).json({ error: "Invalid meeting" });
   }
-  const meetings = readMeetings();
+  const meetings = readMeetings().filter((m) => m.id !== meeting.id);
   meetings.unshift(meeting);
   writeMeetings(meetings);
   res.status(201).json(meeting);
@@ -153,12 +184,15 @@ app.delete("/api/meetings/:id", (req, res) => {
 
 app.patch("/api/meetings/:id/actions", (req, res) => {
   const { task, completed } = req.body;
+  if (!isString(task) || typeof completed !== "boolean") {
+    return res.status(400).json({ error: "Expected { task: string, completed: boolean }" });
+  }
   const meetings = readMeetings();
   const meeting = meetings.find((m) => m.id === req.params.id);
   if (!meeting) {
     return res.status(404).json({ error: "Meeting not found" });
   }
-  meeting.actionItems = meeting.actionItems.map((action) =>
+  meeting.actionItems = (meeting.actionItems ?? []).map((action) =>
     action.task === task ? { ...action, completed } : action
   );
   writeMeetings(meetings);
@@ -173,32 +207,44 @@ app.get("/api/meetings/exists/:id", (req, res) => {
 
 app.post("/api/ai/summarize", async (req, res) => {
   const { transcript, title } = req.body;
-  if (!transcript) {
+  if (!isString(transcript) || !transcript.trim()) {
     return res.status(400).json({ error: "Missing transcript" });
   }
   if (!requireAi(res)) return;
 
   try {
-    res.json(await summarize(transcript, title));
+    res.json(await summarize(transcript, isString(title) ? title : ""));
   } catch (error: any) {
     console.error("Summarization failed:", error);
-    res.status(500).json({ error: error.message || "Summarization failed" });
+    res.status(502).json({ error: "The AI service failed to summarise the meeting. Try again." });
   }
 });
 
 app.post("/api/ai/chat", async (req, res) => {
   const { transcript, messages, question } = req.body;
-  if (!transcript || !question) {
+  if (!isString(transcript) || !transcript.trim() || !isString(question) || !question.trim()) {
     return res.status(400).json({ error: "Missing transcript or question" });
   }
   if (!requireAi(res)) return;
 
   try {
-    res.json({ answer: await answerQuestion(transcript, messages || [], question) });
+    res.json({ answer: await answerQuestion(transcript, Array.isArray(messages) ? messages : [], question) });
   } catch (error: any) {
     console.error("Chat failed:", error);
-    res.status(500).json({ error: error.message || "Chat failed" });
+    res.status(502).json({ error: "The AI service failed to answer. Try again." });
   }
+});
+
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
+
+// Body-parser errors (bad JSON, body too large) as JSON instead of an HTML stack trace.
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (res.headersSent) return next(err);
+  const status = err.status || err.statusCode || 500;
+  if (status >= 500) console.error(err);
+  res.status(status).json({ error: status === 413 ? "Request too large" : status < 500 ? "Invalid request" : "Server error" });
 });
 
 function broadcast(roomId: string, payload: object, exceptId?: string) {
@@ -219,31 +265,51 @@ function broadcastParticipants(roomId: string) {
   broadcast(roomId, { type: "room-participants", participants });
 }
 
+const clip = (value: unknown, max: number) => (isString(value) ? value.trim().slice(0, max) : "");
+
 function handleConnection(ws: WebSocket) {
   let roomId: string | null = null;
   let participantId: string | null = null;
 
-  const self = () => (roomId && participantId ? activeRooms.get(roomId)?.get(participantId) : undefined);
-
-  ws.on("message", (raw) => {
-    let data: any;
-    try {
-      data = JSON.parse(raw.toString());
-    } catch {
-      return;
+  const leaveRoom = () => {
+    if (!roomId || !participantId) return;
+    const room = activeRooms.get(roomId);
+    // Only remove the entry if it still belongs to this socket.
+    if (room && room.get(participantId)?.ws === ws) {
+      room.delete(participantId);
+      if (room.size === 0) {
+        activeRooms.delete(roomId);
+      } else {
+        broadcastParticipants(roomId);
+      }
     }
+    roomId = null;
+    participantId = null;
+  };
+
+  const handleMessage = (data: any) => {
+    if (!data || typeof data !== "object") return;
 
     if (data.type === "join-room") {
-      const { participant } = data;
-      roomId = data.roomId as string;
-      participantId = participant.id || Math.random().toString(36).slice(2, 9);
+      const participant = data.participant && typeof data.participant === "object" ? data.participant : {};
+      const nextRoom = clip(data.roomId, 64);
+      if (!nextRoom) return;
+
+      leaveRoom();
+      roomId = nextRoom;
+      participantId = clip(participant.id, 64) || Math.random().toString(36).slice(2, 9);
       if (!activeRooms.has(roomId)) {
         activeRooms.set(roomId, new Map());
       }
-      activeRooms.get(roomId)!.set(participantId!, {
-        id: participantId!,
-        name: participant.name,
-        phone: participant.phone,
+      // The same participant id joining again (e.g. a reconnect) replaces the old connection.
+      const previous = activeRooms.get(roomId)!.get(participantId);
+      if (previous && previous.ws !== ws) {
+        previous.ws.close(4000, "Joined from another connection");
+      }
+      activeRooms.get(roomId)!.set(participantId, {
+        id: participantId,
+        name: clip(participant.name, 40) || "Guest",
+        phone: clip(participant.phone, 25),
         isMuted: Boolean(participant.isMuted),
         isCameraOn: participant.isCameraOn !== false,
         isHandRaised: false,
@@ -253,50 +319,65 @@ function handleConnection(ws: WebSocket) {
       return;
     }
 
-    const me = self();
-    if (!me || !roomId) return;
+    const me = roomId && participantId ? activeRooms.get(roomId)?.get(participantId) : undefined;
+    if (!me || !roomId || me.ws !== ws) return;
 
     switch (data.type) {
       case "update-state":
-        me.isMuted = data.isMuted;
-        me.isCameraOn = data.isCameraOn;
+        me.isMuted = Boolean(data.isMuted);
+        me.isCameraOn = Boolean(data.isCameraOn);
         broadcastParticipants(roomId);
         break;
       case "raise-hand":
-        me.isHandRaised = data.isHandRaised;
+        me.isHandRaised = Boolean(data.isHandRaised);
         broadcastParticipants(roomId);
         break;
       case "reaction":
-        broadcast(roomId, {
-          type: "receive-reaction",
-          participantId: me.id,
-          senderName: data.senderName,
-          reaction: data.reaction,
-        }, me.id);
+        if (!isString(data.reaction)) return;
+        broadcast(roomId, { type: "receive-reaction", participantId: me.id, senderName: me.name, reaction: clip(data.reaction, 8) }, me.id);
         break;
-      case "chat-message":
+      case "chat-message": {
+        const text = clip(data.message?.text, 2000);
+        if (!text) return;
         broadcast(roomId, {
           type: "receive-chat-message",
-          message: { ...data.message, senderId: me.id },
+          message: {
+            id: clip(data.message.id, 64) || Math.random().toString(36).slice(2, 9),
+            senderId: me.id,
+            senderName: me.name,
+            text,
+            timestamp: clip(data.message.timestamp, 20),
+          },
         }, me.id);
         break;
-      case "transcript-line":
-        broadcast(roomId, { type: "receive-transcript-line", line: data.line }, me.id);
+      }
+      case "transcript-line": {
+        const text = clip(data.line?.text, 2000);
+        if (!text) return;
+        broadcast(roomId, {
+          type: "receive-transcript-line",
+          line: {
+            id: clip(data.line.id, 64) || Math.random().toString(36).slice(2, 9),
+            speaker: me.name,
+            text,
+            timestamp: clip(data.line.timestamp, 20),
+          },
+        }, me.id);
         break;
+      }
+    }
+  };
+
+  ws.on("message", (raw) => {
+    try {
+      handleMessage(JSON.parse(raw.toString()));
+    } catch (err) {
+      // A bad message from one client must never take the server down.
+      console.warn("Ignored WebSocket message:", (err as Error).message);
     }
   });
 
-  ws.on("close", () => {
-    if (!roomId || !participantId) return;
-    const room = activeRooms.get(roomId);
-    if (!room) return;
-    room.delete(participantId);
-    if (room.size === 0) {
-      activeRooms.delete(roomId);
-    } else {
-      broadcastParticipants(roomId);
-    }
-  });
+  ws.on("close", leaveRoom);
 }
 
 async function startServer() {
@@ -317,6 +398,8 @@ async function startServer() {
     const url = new URL(request.url || "", `http://${request.headers.host || "localhost"}`);
     if (url.pathname === "/ws") {
       wss.handleUpgrade(request, socket, head, (ws) => wss.emit("connection", ws, request));
+    } else {
+      socket.destroy();
     }
   });
 
