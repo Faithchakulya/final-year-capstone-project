@@ -69,7 +69,7 @@ export default function Home({ meetings, hasApiKey, initialJoinCode, onStartNew,
 
         {!hasApiKey && (
           <div className="mb-5 bg-[#211b15]/60 border border-amber-950/40 rounded-2xl p-3.5 text-[11px] text-amber-200/90">
-            AI features are off because <code>GROQ_API_KEY</code> isn't set. Calls and transcripts still work, but meetings
+            AI features are off because <code>GEMINI_API_KEY</code> isn't set. Calls and transcripts still work, but meetings
             can only be saved without a summary.
           </div>
         )}

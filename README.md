@@ -1,6 +1,6 @@
 # Atarashi Meet
 
-A browser-based meeting room that transcribes what people say and turns the transcript into meeting minutes. Participants join a room by code or link, speech is transcribed in the browser, and when the call ends the transcript is summarised into a summary, decisions and action items using the Groq API.
+A browser-based meeting room that transcribes what people say and turns the transcript into meeting minutes. Participants join a room by code or link, speech is transcribed in the browser, and when the call ends the transcript is summarised into a summary, decisions and action items using Google Gemini.
 
 ## Features
 
@@ -8,7 +8,7 @@ A browser-based meeting room that transcribes what people say and turns the tran
 - **Live transcription** – each participant's speech is transcribed with the Web Speech API and shared with everyone in the room over WebSockets.
 - **Audio and video calls** – participants hear and see each other over peer-to-peer WebRTC connections, set up through the room WebSocket.
 - **Room presence** – participant list with mute, camera and raised-hand state, plus emoji reactions and text chat.
-- **Meeting minutes** – on leaving, the transcript is sent to Groq (`llama-3.3-70b-versatile`), which returns a summary, topics, decisions and action items. Meetings can also be saved without a summary.
+- **Meeting minutes** – on leaving, the transcript is sent to Google Gemini (`gemini-flash-lite-latest` by default, falling back to `gemini-flash-latest` when busy; set `GEMINI_MODEL` to change it), which returns a summary, topics, decisions and action items. Meetings can also be saved without a summary.
 - **Ask AI** – ask questions about a meeting, answered from its transcript.
 - **History** – past meetings are stored in `meetings.json`, with tickable action items and Word (`.doc`) export.
 
@@ -39,11 +39,11 @@ Requires Node.js 18 or newer.
 
 ```bash
 npm install
-cp .env.example .env   # then set GROQ_API_KEY
+cp .env.example .env   # then set GEMINI_API_KEY
 npm run dev
 ```
 
-Open http://localhost:3000. Without `GROQ_API_KEY` everything except summaries and Ask AI still works, and the AI endpoints return `503`.
+Open http://localhost:3000. Without `GEMINI_API_KEY` everything except summaries and Ask AI still works, and the AI endpoints return `503`.
 
 ### Production build
 
@@ -57,7 +57,7 @@ npm start
 ## Project structure
 
 ```
-server.ts                Express API, Groq calls, WebSocket rooms
+server.ts                Express API, Gemini calls, WebSocket rooms
 devCert.ts               Local CA and HTTPS certificate for testing on other devices
 src/
   App.tsx                View routing and top-level state

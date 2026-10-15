@@ -341,7 +341,7 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
       const response = await fetch("/api/ai/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript: transcriptText, title: meetingTitle }),
+        body: JSON.stringify({ transcript: transcriptText, title: meetingTitle, attendees: [...attendees.current] }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Summarization failed.");

@@ -15,10 +15,13 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const MEETINGS_FILE = path.join(process.cwd(), "meetings.json");
-const GROQ_API_KEY = process.env.GROQ_API_KEY?.trim() || "";
-const GROQ_URL = "https://api.groq.com/openai/v1";
-const CHAT_MODEL = "llama-3.3-70b-versatile";
-const AI_NOT_CONFIGURED = "AI is not configured (set GROQ_API_KEY).";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY?.trim() || "";
+const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+// "-latest" aliases follow Google's current stable models. Flash-Lite is fast and
+// enough for minutes; Flash is the fallback when it is busy or unavailable.
+const GEMINI_MODELS = [process.env.GEMINI_MODEL?.trim() || "gemini-flash-lite-latest", "gemini-flash-latest"];
+const GEMINI_TIMEOUT_MS = 30_000;
+const AI_NOT_CONFIGURED = "AI is not configured (set GEMINI_API_KEY).";
 
 type Connection = RoomParticipant & { ws: WebSocket };
 
@@ -76,59 +79,114 @@ function writeMeetings(meetings: Meeting[]) {
   }
 }
 
-if (!GROQ_API_KEY) {
+if (!GEMINI_API_KEY) {
   console.warn(`${AI_NOT_CONFIGURED} AI routes will return 503.`);
 }
 
 // Saved meetings include the full transcript.
 app.use(express.json({ limit: "5mb" }));
 
-async function groqChat(
-  messages: { role: "system" | "user"; content: string }[],
-  options: { json?: boolean } = {}
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Calls Gemini's generateContent. Busy or failing models (429/5xx) are retried
+ * twice, and a model that times out or keeps failing is swapped for the next
+ * one in GEMINI_MODELS.
+ */
+async function generate(
+  systemInstruction: string,
+  prompt: string,
+  options: { responseSchema?: object } = {}
 ): Promise<string> {
-  const response = await fetch(`${GROQ_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${GROQ_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: CHAT_MODEL,
-      messages,
-      ...(options.json ? { response_format: { type: "json_object" } } : {}),
-    }),
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    ...(options.responseSchema
+      ? { generationConfig: { responseMimeType: "application/json", responseSchema: options.responseSchema } }
+      : {}),
   });
 
-  if (!response.ok) {
-    throw new Error(`Groq request failed: ${response.status} ${await response.text()}`);
+  let lastError = "";
+  for (const model of [...new Set(GEMINI_MODELS)]) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let response: Response;
+      try {
+        response = await fetch(`${GEMINI_URL}/${model}:generateContent`, {
+          method: "POST",
+          headers: { "x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json" },
+          body,
+          signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
+        });
+      } catch (err) {
+        lastError = `${model}: ${(err as Error).name === "TimeoutError" ? "timed out" : (err as Error).message}`;
+        break;
+      }
+
+      if (response.ok) {
+        const result = (await response.json()) as {
+          candidates?: { content?: { parts?: { text?: string }[] } }[];
+        };
+        const text = result.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+        if (text) return text;
+        lastError = `${model} returned no text`;
+        break;
+      }
+
+      lastError = `${model}: ${response.status} ${await response.text()}`;
+      const retryable = response.status === 429 || response.status >= 500;
+      if (!retryable) break;
+      if (attempt < 2) await sleep(1000 * (attempt + 1));
+    }
+    console.warn(`Gemini model failed, trying the next one. ${lastError.slice(0, 200)}`);
   }
-  const result = (await response.json()) as { choices: { message: { content: string } }[] };
-  return result.choices[0]?.message.content ?? "";
+  throw new Error(`Gemini request failed. ${lastError}`);
 }
 
-async function summarize(transcript: string, title: string) {
+const MINUTES_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    summary: { type: "STRING" },
+    topicsCovered: { type: "ARRAY", items: { type: "STRING" } },
+    actionItems: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: { assignee: { type: "STRING" }, task: { type: "STRING" } },
+        required: ["assignee", "task"],
+      },
+    },
+    decisions: { type: "ARRAY", items: { type: "STRING" } },
+    peoplePresent: { type: "ARRAY", items: { type: "STRING" } },
+    discussion: { type: "STRING" },
+  },
+  required: ["summary", "topicsCovered", "actionItems", "decisions", "peoplePresent", "discussion"],
+};
+
+async function summarize(transcript: string, title: string, attendees: string[]) {
   const prompt =
     `Transcript of the meeting "${title || "Meeting"}":\n\n${transcript}\n\n` +
-    `Return a JSON object with these fields:\n` +
-    `{\n` +
-    `  "summary": "2-3 sentence summary",\n` +
-    `  "topicsCovered": ["topic"],\n` +
-    `  "actionItems": [{ "assignee": "Name", "task": "Description" }],\n` +
-    `  "decisions": ["decision"],\n` +
-    `  "peoplePresent": ["Name"],\n` +
-    `  "discussion": "One paragraph describing what each participant contributed"\n` +
-    `}\n` +
+    (attendees.length ? `People in the call (some may not have spoken): ${attendees.join(", ")}\n\n` : "") +
+    `Write the minutes: a 2-3 sentence summary, the topics covered, action items with who owns them, ` +
+    `decisions made, the people present, and one paragraph on what each participant contributed. ` +
     `Take names from the speaker labels. Leave a list empty if the transcript has nothing for it.`;
 
-  const content = await groqChat(
-    [
-      { role: "system", content: "You write meeting minutes as JSON. Only use information from the transcript." },
-      { role: "user", content: prompt },
-    ],
-    { json: true }
-  );
-  return JSON.parse(content || "{}");
+  const content = await generate("You write meeting minutes. Only use information from the transcript.", prompt, {
+    responseSchema: MINUTES_SCHEMA,
+  });
+
+  // The schema should guarantee this shape, but saved meetings are validated, so normalise anyway.
+  const minutes = JSON.parse(content);
+  const strings = (value: unknown) => (isStringArray(value) ? value : []);
+  return {
+    summary: isString(minutes.summary) ? minutes.summary : "",
+    topicsCovered: strings(minutes.topicsCovered),
+    actionItems: Array.isArray(minutes.actionItems)
+      ? minutes.actionItems.filter((a: any) => a && isString(a.task) && isString(a.assignee))
+      : [],
+    decisions: strings(minutes.decisions),
+    peoplePresent: strings(minutes.peoplePresent),
+    discussion: isString(minutes.discussion) ? minutes.discussion : "",
+  };
 }
 
 async function answerQuestion(
@@ -141,28 +199,21 @@ async function answerQuestion(
     .map((m) => `${m.sender === "user" ? "User" : "Assistant"}: ${m.text}`)
     .join("\n");
 
-  return groqChat([
-    {
-      role: "system",
-      content:
-        "Answer questions about a meeting using only its transcript. " +
-        "If the transcript does not contain the answer, say so.",
-    },
-    {
-      role: "user",
-      content: `Transcript:\n${transcript}\n\nConversation so far:\n${historyText}\n\nQuestion: ${question}`,
-    },
-  ]);
+  return generate(
+    "Answer questions about a meeting using only its transcript. " +
+      "If the transcript does not contain the answer, say so. Keep answers short.",
+    `Transcript:\n${transcript}\n\nConversation so far:\n${historyText}\n\nQuestion: ${question}`
+  );
 }
 
 function requireAi(res: express.Response): boolean {
-  if (GROQ_API_KEY) return true;
+  if (GEMINI_API_KEY) return true;
   res.status(503).json({ error: AI_NOT_CONFIGURED });
   return false;
 }
 
 app.get("/api/config", (_req, res) => {
-  res.json({ hasApiKey: Boolean(GROQ_API_KEY) });
+  res.json({ hasApiKey: Boolean(GEMINI_API_KEY) });
 });
 
 app.get("/api/meetings", (_req, res) => {
@@ -209,14 +260,15 @@ app.get("/api/meetings/exists/:id", (req, res) => {
 });
 
 app.post("/api/ai/summarize", async (req, res) => {
-  const { transcript, title } = req.body;
+  const { transcript, title, attendees } = req.body;
   if (!isString(transcript) || !transcript.trim()) {
     return res.status(400).json({ error: "Missing transcript" });
   }
   if (!requireAi(res)) return;
 
   try {
-    res.json(await summarize(transcript, isString(title) ? title : ""));
+    const people = isStringArray(attendees) ? attendees.slice(0, 50).map((n) => n.slice(0, 40)) : [];
+    res.json(await summarize(transcript, isString(title) ? title : "", people));
   } catch (error: any) {
     console.error("Summarization failed:", error);
     res.status(502).json({ error: "The AI service failed to summarise the meeting. Try again." });
