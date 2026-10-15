@@ -3,6 +3,7 @@ import path from "path";
 import fs from "fs";
 import http from "http";
 import https from "https";
+import net from "net";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { WebSocketServer, WebSocket } from "ws";
@@ -422,7 +423,26 @@ async function startServer() {
     // In development, Vite's hot-reload socket handles other upgrade requests.
   });
 
-  server.listen(PORT, "0.0.0.0", () => {
+  // In HTTPS mode, plain http:// requests on the same port are redirected to https://.
+  // TLS connections start with byte 0x16; anything else is treated as HTTP.
+  const listener = useHttps
+    ? net.createServer((socket) => {
+        socket.once("data", (firstChunk) => {
+          socket.pause();
+          socket.unshift(firstChunk);
+          const target = firstChunk[0] === 0x16 ? server : redirectServer;
+          target.emit("connection", socket);
+          process.nextTick(() => socket.resume());
+        });
+        socket.on("error", () => socket.destroy());
+      })
+    : server;
+  const redirectServer = http.createServer((req, res) => {
+    res.writeHead(301, { Location: `https://${req.headers.host ?? `localhost:${PORT}`}${req.url ?? "/"}` });
+    res.end();
+  });
+
+  listener.listen(PORT, "0.0.0.0", () => {
     const protocol = useHttps ? "https" : "http";
     console.log(`Server running on ${protocol}://localhost:${PORT}`);
     for (const address of lanAddresses()) {

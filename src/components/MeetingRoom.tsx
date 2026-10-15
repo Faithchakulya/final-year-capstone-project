@@ -467,6 +467,15 @@ export default function MeetingRoom({ meetingId, meetingTitle, userName, userPho
           </div>
         </div>
 
+        {room.status !== "connected" && (
+          <div className="mb-3 bg-amber-950/40 border border-amber-800/50 text-amber-200 rounded-xl px-3 py-2 text-xs flex items-center gap-2">
+            <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+            {room.status === "connecting"
+              ? "Connecting to the meeting server..."
+              : "Lost connection to the meeting server. Reconnecting... Others can't see or join you until this clears."}
+          </div>
+        )}
+
         <div className="flex-grow flex flex-col md:grid md:grid-cols-12 md:gap-4 md:min-h-0 md:overflow-hidden">
           <div className="flex flex-col flex-grow md:col-span-8 md:h-full md:min-h-0">
             <div className="flex-grow flex flex-col items-center justify-center relative mb-4 md:mb-0 bg-[#11121b] border border-slate-900 rounded-2xl overflow-hidden min-h-[280px] pt-6 pb-24">

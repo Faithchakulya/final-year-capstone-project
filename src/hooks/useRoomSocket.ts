@@ -26,46 +26,65 @@ export function useRoomSocket(roomId: string, self: Self, handlers: Handlers) {
   selfRef.current = self;
 
   const [participants, setParticipants] = useState<RoomParticipant[]>([]);
+  const [status, setStatus] = useState<"connecting" | "connected" | "reconnecting">("connecting");
 
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-    socketRef.current = ws;
+    let closedByUs = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
 
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: "join-room", roomId, participant: selfRef.current }));
+    const connect = () => {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+      socketRef.current = ws;
+
+      ws.onopen = () => {
+        attempt = 0;
+        setStatus("connected");
+        ws.send(JSON.stringify({ type: "join-room", roomId, participant: selfRef.current }));
+      };
+
+      ws.onmessage = (event) => {
+        let message: any;
+        try {
+          message = JSON.parse(event.data);
+        } catch {
+          return;
+        }
+        switch (message.type) {
+          case "room-participants":
+            setParticipants(message.participants);
+            break;
+          case "receive-transcript-line":
+            handlersRef.current.onTranscriptLine(message.line);
+            break;
+          case "receive-reaction":
+            handlersRef.current.onReaction(message.reaction, message.senderName);
+            break;
+          case "receive-chat-message":
+            handlersRef.current.onChatMessage(message.message);
+            break;
+          case "signal":
+            handlersRef.current.onSignal(message);
+            break;
+        }
+      };
+
+      // Keep retrying (1s, 2s, ... up to 5s) so a Wi-Fi blip or server restart doesn't end the call.
+      ws.onclose = () => {
+        if (closedByUs) return;
+        setStatus("reconnecting");
+        setParticipants([]);
+        retryTimer = setTimeout(connect, Math.min(1000 * ++attempt, 5000));
+      };
     };
 
-    ws.onmessage = (event) => {
-      let message: any;
-      try {
-        message = JSON.parse(event.data);
-      } catch {
-        return;
-      }
-      switch (message.type) {
-        case "room-participants":
-          setParticipants(message.participants);
-          break;
-        case "receive-transcript-line":
-          handlersRef.current.onTranscriptLine(message.line);
-          break;
-        case "receive-reaction":
-          handlersRef.current.onReaction(message.reaction, message.senderName);
-          break;
-        case "receive-chat-message":
-          handlersRef.current.onChatMessage(message.message);
-          break;
-        case "signal":
-          handlersRef.current.onSignal(message);
-          break;
-      }
-    };
-
-    ws.onerror = (err) => console.error("WebSocket error:", err);
+    connect();
 
     return () => {
-      ws.close();
+      closedByUs = true;
+      clearTimeout(retryTimer);
+      socketRef.current?.close();
       socketRef.current = null;
     };
   }, [roomId]);
@@ -82,5 +101,5 @@ export function useRoomSocket(roomId: string, self: Self, handlers: Handlers) {
   }, [self.isMuted, self.isCameraOn]);
 
   const remoteParticipants = participants.filter((p) => p.id !== self.id);
-  return { send, remoteParticipants };
+  return { send, remoteParticipants, status };
 }
