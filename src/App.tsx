@@ -101,7 +101,11 @@ export default function App() {
     if (!code) return;
     setActiveMeetingId(code);
     setActiveMeetingTitle(nextMeetingTitle());
-    if (localStorage.getItem("user_name")) {
+    const savedName = localStorage.getItem("user_name");
+    if (savedName) {
+      // The name may have been saved after this page loaded (e.g. in another tab).
+      setUserName(savedName);
+      setUserPhone(localStorage.getItem("user_phone") || "");
       setView("meeting");
     } else {
       setPendingJoinCode(code);
