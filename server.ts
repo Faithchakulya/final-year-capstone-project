@@ -14,7 +14,7 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-const MEETINGS_FILE = path.join(process.cwd(), "meetings.json");
+const MEETINGS_FILE = process.env.MEETINGS_FILE || path.join(process.cwd(), "meetings.json");
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY?.trim() || "";
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 // "-latest" aliases follow Google's current stable models. Flash-Lite is fast and
